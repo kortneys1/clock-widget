@@ -3,20 +3,20 @@
   Signage clock with optional logo. All options come from the URL query string:
 
     fontSize        px number, or "auto" (default) to scale with the screen
-    fontColor       hex without '#', e.g. 000000           (default 000000)
+    fontColor       hex without '#', e.g. 000000           (default ffffff)
     fontFamily      any CSS font name, e.g. Arial          (default Arial)
     fontWeight      e.g. 400, 700                          (default 700)
-    backgroundColor hex without '#', e.g. ffffff           (default ffffff)
+    backgroundColor hex without '#', e.g. ffffff           (default 000000)
     format          12 or 24                               (default 12)
     ampm            1 to show am/pm in 12-hour mode        (default 0)
     seconds         1 to show seconds                      (default 0)
     date            1 to show the date under the time      (default 0)
-    logo            image URL (PNG/SVG/JPG); omit for no logo
-    logoPosition    top | bottom | left | right            (default top)
+    logo            image URL (PNG/SVG/JPG), or "none"     (default logo-placeholder.svg)
+    logoPosition    top | bottom | left | right            (default bottom)
     logoSize        percent of screen height, e.g. 20      (default 20)
 
   Example:
-    clock.html?logo=https://example.com/logo.png&logoPosition=left&backgroundColor=111111&fontColor=ffffff
+    clock.html?logo=https://example.com/logo.png&logoPosition=top&backgroundColor=ffffff&fontColor=000000
 -->
 <html lang="en">
 <head>
@@ -30,7 +30,7 @@
     height: 100%;
     width: 100%;
     overflow: hidden;
-    background: var(--bg, #ffffff);
+    background: var(--bg, #000000);
   }
 
   body {
@@ -39,7 +39,7 @@
     align-items: center;
     gap: 4vmin;
     padding: 4vmin;
-    color: var(--fg, #000000);
+    color: var(--fg, #ffffff);
     font-family: var(--font, Arial), sans-serif;
   }
 
@@ -81,7 +81,7 @@
   }
 </style>
 </head>
-<body class="pos-top">
+<body class="pos-bottom">
   <img id="logo" alt="">
   <div id="clock">
     <div id="time"></div>
@@ -103,8 +103,8 @@
     return /^([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) ? '#' + v : '#' + fallback;
   }
 
-  root.setProperty('--fg', hex('fontColor', '000000'));
-  root.setProperty('--bg', hex('backgroundColor', 'ffffff'));
+  root.setProperty('--fg', hex('fontColor', 'ffffff'));
+  root.setProperty('--bg', hex('backgroundColor', '000000'));
   root.setProperty('--font', '"' + get('fontFamily', 'Arial').replace(/["\\;{}]/g, '') + '"');
   root.setProperty('--weight', parseInt(get('fontWeight', '700'), 10) || 700);
 
@@ -135,7 +135,8 @@
   // instead of jumping. A cached logo loads almost instantly; the timeout is a safety net.
   function reveal() { fit(); document.body.style.visibility = 'visible'; }
 
-  var logoUrl = get('logo', '');
+  var logoUrl = get('logo', 'logo-placeholder.svg');
+  if (logoUrl === 'none') logoUrl = '';
   if (logoUrl) {
     document.body.style.visibility = 'hidden';
     var logo = document.getElementById('logo');
@@ -150,7 +151,7 @@
     logo.onerror = function () { done(false); };
     setTimeout(function () { done(logo.complete && logo.naturalWidth > 0); }, 2000);
     logo.src = logoUrl;
-    var pos = get('logoPosition', 'top');
+    var pos = get('logoPosition', 'bottom');
     if (['top', 'bottom', 'left', 'right'].indexOf(pos) !== -1) {
       document.body.className = 'pos-' + pos;
     }
