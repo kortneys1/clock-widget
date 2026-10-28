@@ -1,0 +1,204 @@
+<!doctype html>
+<!--
+  Signage clock with optional logo. All options come from the URL query string:
+
+    fontSize        px number, or "auto" (default) to scale with the screen
+    fontColor       hex without '#', e.g. 000000           (default 000000)
+    fontFamily      any CSS font name, e.g. Arial          (default Arial)
+    fontWeight      e.g. 400, 700                          (default 700)
+    backgroundColor hex without '#', e.g. ffffff           (default ffffff)
+    format          12 or 24                               (default 12)
+    ampm            1 to show am/pm in 12-hour mode        (default 0)
+    seconds         1 to show seconds                      (default 0)
+    date            1 to show the date under the time      (default 0)
+    logo            image URL (PNG/SVG/JPG); omit for no logo
+    logoPosition    top | bottom | left | right            (default top)
+    logoSize        percent of screen height, e.g. 20      (default 20)
+
+  Example:
+    clock.html?logo=https://example.com/logo.png&logoPosition=left&backgroundColor=111111&fontColor=ffffff
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clock</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+    background: var(--bg, #ffffff);
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4vmin;
+    padding: 4vmin;
+    color: var(--fg, #000000);
+    font-family: var(--font, Arial), sans-serif;
+  }
+
+  body.pos-top    { flex-direction: column; }
+  body.pos-bottom { flex-direction: column-reverse; }
+  body.pos-left   { flex-direction: row; }
+  body.pos-right  { flex-direction: row-reverse; }
+
+  #logo {
+    display: none;
+    height: var(--logo-size, 20vh);
+    max-width: 80vw;
+    object-fit: contain;
+  }
+  #logo.ready { display: block; }
+  body.pos-left #logo, body.pos-right #logo { max-width: 35vw; }
+
+  #clock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1;
+  }
+
+  #time {
+    font-size: var(--size, 22vmin);
+    font-weight: var(--weight, 700);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  #ampm { font-size: 0.4em; margin-left: 0.15em; }
+
+  #date {
+    display: none;
+    font-size: calc(var(--size, 22vmin) * 0.22);
+    margin-top: 0.4em;
+    opacity: 0.8;
+  }
+</style>
+</head>
+<body class="pos-top">
+  <img id="logo" alt="">
+  <div id="clock">
+    <div id="time"></div>
+    <div id="date"></div>
+  </div>
+
+<script>
+  var params = new URLSearchParams(location.search);
+  var root = document.documentElement.style;
+
+  function get(name, fallback) {
+    var v = params.get(name);
+    return v === null || v === '' ? fallback : v;
+  }
+
+  // Only accept 3/6/8-digit hex so a URL can't inject arbitrary CSS
+  function hex(name, fallback) {
+    var v = get(name, fallback).replace(/^#/, '');
+    return /^([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) ? '#' + v : '#' + fallback;
+  }
+
+  root.setProperty('--fg', hex('fontColor', '000000'));
+  root.setProperty('--bg', hex('backgroundColor', 'ffffff'));
+  root.setProperty('--font', '"' + get('fontFamily', 'Arial').replace(/["\\;{}]/g, '') + '"');
+  root.setProperty('--weight', parseInt(get('fontWeight', '700'), 10) || 700);
+
+  var fontSize = get('fontSize', 'auto');
+  var autoSize = fontSize === 'auto' || isNaN(parseFloat(fontSize));
+  if (!autoSize) {
+    root.setProperty('--size', parseFloat(fontSize) + 'px');
+  }
+
+  // In auto mode, start as tall as the screen and shrink until the clock fits
+  // beside/under the logo, so the digits are as large as possible for distance viewing
+  function fit() {
+    if (!autoSize) return;
+    var clock = document.getElementById('clock');
+    var size = window.innerHeight;
+    root.setProperty('--size', size + 'px');
+    while (size > 10 && (document.body.scrollWidth > window.innerWidth ||
+                         document.body.scrollHeight > window.innerHeight ||
+                         clock.scrollWidth > clock.clientWidth)) {
+      size *= 0.95;
+      root.setProperty('--size', size + 'px');
+    }
+  }
+  window.addEventListener('resize', fit);
+
+  // Keep the page hidden until the logo has loaded (or failed) and the text has been
+  // sized around it, so each reload by the signage player appears in its final layout
+  // instead of jumping. A cached logo loads almost instantly; the timeout is a safety net.
+  function reveal() { fit(); document.body.style.visibility = 'visible'; }
+
+  var logoUrl = get('logo', '');
+  if (logoUrl) {
+    document.body.style.visibility = 'hidden';
+    var logo = document.getElementById('logo');
+    var revealed = false;
+    function done(ok) {
+      if (revealed) return;
+      revealed = true;
+      if (ok) logo.classList.add('ready');
+      reveal();
+    }
+    logo.onload = function () { done(true); };
+    logo.onerror = function () { done(false); };
+    setTimeout(function () { done(logo.complete && logo.naturalWidth > 0); }, 2000);
+    logo.src = logoUrl;
+    var pos = get('logoPosition', 'top');
+    if (['top', 'bottom', 'left', 'right'].indexOf(pos) !== -1) {
+      document.body.className = 'pos-' + pos;
+    }
+    root.setProperty('--logo-size', (parseFloat(get('logoSize', '20')) || 20) + 'vh');
+  }
+
+  var use24 = get('format', '12') === '24';
+  var showAmPm = get('ampm', '0') === '1';
+  var showSeconds = get('seconds', '0') === '1';
+  var showDate = get('date', '0') === '1';
+  var timeEl = document.getElementById('time');
+  var dateEl = document.getElementById('date');
+  if (showDate) dateEl.style.display = 'block';
+
+  var lastLength = 0;
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function tick() {
+    var now = new Date();
+    var h = now.getHours();
+    var suffix = '';
+    if (!use24) {
+      suffix = h >= 12 ? 'pm' : 'am';
+      h = h % 12 || 12;
+    }
+    var text = (use24 ? pad(h) : h) + ':' + pad(now.getMinutes());
+    if (showSeconds) text += ':' + pad(now.getSeconds());
+    timeEl.innerHTML = text + (!use24 && showAmPm ? '<span id="ampm">' + suffix + '</span>' : '');
+
+    // 9:59 -> 10:00 adds a digit, so re-fit whenever the text length changes
+    if (text.length !== lastLength) {
+      lastLength = text.length;
+      fit();
+    }
+
+    if (showDate) {
+      dateEl.textContent = now.toLocaleDateString(undefined, {
+        weekday: 'long', month: 'long', day: 'numeric'
+      });
+    }
+
+    // Re-sync to the top of each second so the display never drifts
+    setTimeout(tick, 1000 - now.getMilliseconds());
+  }
+
+  tick();
+  if (!logoUrl) reveal();
+</script>
+</body>
+</html>
