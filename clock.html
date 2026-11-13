@@ -132,7 +132,8 @@
 
   // Keep the page hidden until the logo has loaded (or failed) and the text has been
   // sized around it, so each reload by the signage player appears in its final layout
-  // instead of jumping. A cached logo loads almost instantly; the timeout is a safety net.
+  // instead of jumping. A cached logo loads almost instantly; the timeout is a safety net
+  // so a slow logo never keeps the time off screen.
   function reveal() { fit(); document.body.style.visibility = 'visible'; }
 
   var logoUrl = get('logo', 'logo.png');
@@ -141,15 +142,15 @@
     document.body.style.visibility = 'hidden';
     var logo = document.getElementById('logo');
     var revealed = false;
-    function done(ok) {
+    function showPage() {
       if (revealed) return;
       revealed = true;
-      if (ok) logo.classList.add('ready');
       reveal();
     }
-    logo.onload = function () { done(true); };
-    logo.onerror = function () { done(false); };
-    setTimeout(function () { done(logo.complete && logo.naturalWidth > 0); }, 2000);
+    // A logo that arrives after the timeout is still shown, and the time re-fits around it
+    logo.onload = function () { logo.classList.add('ready'); revealed ? fit() : showPage(); };
+    logo.onerror = showPage;
+    setTimeout(showPage, 2000);
     logo.src = logoUrl;
     var pos = get('logoPosition', 'bottom');
     if (['top', 'bottom', 'left', 'right'].indexOf(pos) !== -1) {
