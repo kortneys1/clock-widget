@@ -11,7 +11,7 @@
     ampm            1 to show am/pm in 12-hour mode        (default 0)
     seconds         1 to show seconds                      (default 0)
     date            1 to show the date under the time      (default 0)
-    logo            image URL (PNG/SVG/JPG), or "none"     (default logo-placeholder.svg)
+    logo            image URL (PNG/SVG/JPG), or "none"     (default logo.png)
     logoPosition    top | bottom | left | right            (default bottom)
     logoSize        percent of screen height, e.g. 20      (default 20)
 
@@ -135,7 +135,7 @@
   // instead of jumping. A cached logo loads almost instantly; the timeout is a safety net.
   function reveal() { fit(); document.body.style.visibility = 'visible'; }
 
-  var logoUrl = get('logo', 'logo-placeholder.svg');
+  var logoUrl = get('logo', 'logo.png');
   if (logoUrl === 'none') logoUrl = '';
   if (logoUrl) {
     document.body.style.visibility = 'hidden';
