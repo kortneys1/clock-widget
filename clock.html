@@ -14,6 +14,7 @@
     logo            image URL (PNG/SVG/JPG), or "none"     (default logo.png)
     logoPosition    top | bottom | left | right            (default bottom)
     logoSize        percent of screen height, e.g. 20      (default 20)
+    debug           1 to show what the player's browser reports (screen size, logo status)
 
   Example:
     clock.html?logo=https://example.com/logo.png&logoPosition=top&backgroundColor=ffffff&fontColor=000000
@@ -37,8 +38,8 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 4vmin;
-    padding: 4vmin;
+    gap: var(--pad, 4vmin);
+    padding: var(--pad, 4vmin);
     color: var(--fg, #ffffff);
     font-family: var(--font, Arial), sans-serif;
   }
@@ -72,6 +73,19 @@
   }
 
   #ampm { font-size: 0.4em; margin-left: 0.15em; }
+
+  #debug {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 16px;
+    background: #ffeb3b;
+    color: #000;
+    font: 600 28px/1.3 Arial, sans-serif;
+    z-index: 10;
+    word-break: break-all;
+  }
 
   #date {
     display: none;
@@ -114,16 +128,42 @@
     root.setProperty('--size', parseFloat(fontSize) + 'px');
   }
 
+  var logoPercent = parseFloat(get('logoSize', '20')) || 20;
+
+  // The visible area as the page actually lays out. Signage players' built-in browsers
+  // don't always agree with innerHeight or CSS vh units, so everything is sized from this.
+  function viewport() {
+    var el = document.documentElement;
+    return { w: el.clientWidth || window.innerWidth, h: el.clientHeight || window.innerHeight };
+  }
+
+  // True if the time or logo comes closer to an edge than the margin. Keeping that
+  // margin also protects against TVs that crop the outer few percent of the picture.
+  function overflows(vp) {
+    var m = Math.min(vp.w, vp.h) * 0.04 - 1;
+    var els = [document.getElementById('time')];
+    var logoEl = document.getElementById('logo');
+    if (logoEl.classList.contains('ready')) els.push(logoEl);
+    for (var i = 0; i < els.length; i++) {
+      var r = els[i].getBoundingClientRect();
+      if (r.top < m || r.left < m || r.bottom > vp.h - m || r.right > vp.w - m) return true;
+    }
+    return false;
+  }
+
   // In auto mode, start as tall as the screen and shrink until the clock fits
   // beside/under the logo, so the digits are as large as possible for distance viewing
+  var fittedFor = '';
   function fit() {
+    var vp = viewport();
+    var unit = Math.min(vp.w, vp.h) / 100;
+    root.setProperty('--pad', 4 * unit + 'px');
+    root.setProperty('--logo-size', vp.h * logoPercent / 100 + 'px');
+    fittedFor = vp.w + 'x' + vp.h;
     if (!autoSize) return;
-    var clock = document.getElementById('clock');
-    var size = window.innerHeight;
+    var size = vp.h;
     root.setProperty('--size', size + 'px');
-    while (size > 10 && (document.body.scrollWidth > window.innerWidth ||
-                         document.body.scrollHeight > window.innerHeight ||
-                         clock.scrollWidth > clock.clientWidth)) {
+    while (size > 10 && overflows(vp)) {
       size *= 0.95;
       root.setProperty('--size', size + 'px');
     }
@@ -156,7 +196,6 @@
     if (['top', 'bottom', 'left', 'right'].indexOf(pos) !== -1) {
       document.body.className = 'pos-' + pos;
     }
-    root.setProperty('--logo-size', (parseFloat(get('logoSize', '20')) || 20) + 'vh');
   }
 
   var use24 = get('format', '12') === '24';
@@ -168,6 +207,31 @@
   if (showDate) dateEl.style.display = 'block';
 
   var lastLength = 0;
+
+  // debug=1 prints what the player's browser reports along the top, so a photo of the
+  // screen shows why a layout looks wrong on hardware we can't inspect directly
+  var debugEl = null;
+  if (get('debug', '0') === '1') {
+    debugEl = document.createElement('div');
+    debugEl.id = 'debug';
+    document.body.appendChild(debugEl);
+  }
+
+  function showDebug(vp) {
+    var logoEl = document.getElementById('logo');
+    var logoState = !logoUrl ? 'off' :
+                    logoEl.complete && logoEl.naturalWidth > 0 ? 'loaded' :
+                    logoEl.complete ? 'FAILED' : 'loading';
+    debugEl.textContent =
+      'page ' + vp.w + '×' + vp.h +
+      ' · window ' + window.innerWidth + '×' + window.innerHeight +
+      ' · screen ' + screen.width + '×' + screen.height +
+      ' · pixel ratio ' + (window.devicePixelRatio || 1) +
+      ' · logo ' + logoState +
+      ' · text ' + Math.round(parseFloat(getComputedStyle(timeEl).fontSize)) + 'px' +
+      ' · cut off: ' + (overflows(vp) ? 'YES' : 'no') +
+      ' · ' + navigator.userAgent;
+  }
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -183,11 +247,14 @@
     if (showSeconds) text += ':' + pad(now.getSeconds());
     timeEl.innerHTML = text + (!use24 && showAmPm ? '<span id="ampm">' + suffix + '</span>' : '');
 
-    // 9:59 -> 10:00 adds a digit, so re-fit whenever the text length changes
-    if (text.length !== lastLength) {
+    // Re-fit when 9:59 -> 10:00 adds a digit, when the player changes the page size
+    // without telling it (some don't fire resize events), or if anything is cut off
+    var vp = viewport();
+    if (text.length !== lastLength || vp.w + 'x' + vp.h !== fittedFor || overflows(vp)) {
       lastLength = text.length;
       fit();
     }
+    if (debugEl) showDebug(vp);
 
     if (showDate) {
       dateEl.textContent = now.toLocaleDateString(undefined, {
